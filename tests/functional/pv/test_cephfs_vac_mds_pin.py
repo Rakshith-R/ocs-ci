@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     skipif_cephfs_disabled,
     skipif_external_mode,
+    skipif_hci_client,
     skipif_managed_service,
     skipif_ocp_version,
     skipif_ocs_version,
@@ -134,6 +135,7 @@ def get_subvolume_base_path(pvc_obj, toolbox):
 @skipif_ocp_version("<4.21")
 @skipif_ocs_version("<4.21")
 @skipif_external_mode
+@skipif_hci_client
 @skipif_managed_service
 @skipif_cephfs_disabled
 @polarion_id("OCS-XXXX")  # TODO: replace with the real Polarion ID
@@ -150,11 +152,8 @@ class TestCephFSVACMDSPin(ManageTest):
 
         def restore():
             if original < 2:
-                try:
-                    adjust_active_mds_count_storagecluster(original)
-                    TimeoutSampler(300, 10, active_count).wait_for_func_value(original)
-                except Exception as ex:
-                    logger.warning(f"Failed to restore active MDS count: {ex}")
+                adjust_active_mds_count_storagecluster(original)
+                TimeoutSampler(300, 10, active_count).wait_for_func_value(original)
             ceph_health_check()
 
         request.addfinalizer(restore)
@@ -199,6 +198,9 @@ class TestCephFSVACMDSPin(ManageTest):
             teardown_factory(vac_obj)
             vac_objs.append(vac_obj)
         vac_zero, vac_one = vac_objs
+        # teardown_factory deletes in reverse order, so registering the PVC last
+        # removes it before the VACs and unblocks their vac-protection finalizer.
+        teardown_factory(pvc_obj)
 
         for vac_obj, rank in ((vac_zero, 0), (vac_one, 1)):
             logger.test_step(f"Patch PVC {pvc_obj.name} with VAC {vac_obj.name}")
